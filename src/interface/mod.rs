@@ -8,8 +8,8 @@ use core::ops::Shl;
 
 use embedded_hal::blocking::delay::DelayMs;
 
-#[cfg(feature = "rttdebug")]
-use panic_rtt_core::rprintln;
+#[cfg(feature = "defmt-03")]
+use defmt::println;
 
 /// A method of communicating with the sensor
 pub trait SensorInterface {
@@ -79,8 +79,8 @@ impl SensorCommon {
         }
 
         if 0 == packet_len && 0 != raw_pack_len {
-            #[cfg(feature = "rttdebug")]
-            rprintln!(
+            #[cfg(feature = "defmt-03")]
+            println!(
                 "pph: {:?} {} -> {}",
                 &packet[..PACKET_HEADER_LENGTH],
                 raw_pack_len,

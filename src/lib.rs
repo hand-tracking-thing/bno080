@@ -5,6 +5,7 @@ LICENSE: BSD3 (see LICENSE file)
 
 #![no_std]
 
+#[cfg(feature = "defmt-03")]
 use defmt::Format;
 
 pub mod interface;

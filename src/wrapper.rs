@@ -4,11 +4,12 @@ LICENSE: BSD3 (see LICENSE file)
 */
 
 use crate::interface::{SensorInterface, PACKET_HEADER_LENGTH};
-use defmt::Format;
 use embedded_hal::blocking::delay::DelayMs;
 
 use core::ops::Shr;
 
+#[cfg(feature = "defmt-03")]
+use defmt::Format;
 #[cfg(feature = "defmt-03")]
 use defmt::println;
 
@@ -17,6 +18,7 @@ const PACKET_RECV_BUF_LEN: usize = 1024;
 
 const NUM_CHANNELS: usize = 6;
 
+#[cfg(feature = "defmt-03")]
 #[derive(Debug, Format)]
 pub enum WrapperError<E> {
     ///Communications error
@@ -29,7 +31,63 @@ pub enum WrapperError<E> {
     NoDataAvailable,
 }
 
+#[cfg(not(feature = "defmt-03"))]
+#[derive(Debug)]
+pub enum WrapperError<E> {
+    ///Communications error
+    CommError(E),
+    /// Invalid chip ID was read
+    InvalidChipId(u8),
+    /// Unsupported sensor firmware version
+    InvalidFWVersion(u8),
+    /// We expected some data but didn't receive any
+    NoDataAvailable,
+}
+
+#[cfg(feature = "defmt-03")]
 #[derive(Debug, Format)]
+pub struct BNO080<SI> {
+    pub(crate) sensor_interface: SI,
+    /// each communication channel with the device has its own sequence number
+    sequence_numbers: [u8; NUM_CHANNELS],
+    /// buffer for building and sending packet to the sensor hub
+    packet_send_buf: [u8; PACKET_SEND_BUF_LEN],
+    /// buffer for building packets received from the sensor hub
+    packet_recv_buf: [u8; PACKET_RECV_BUF_LEN],
+
+    last_packet_len_received: usize,
+    /// has the device been succesfully reset
+    device_reset: bool,
+    /// has the product ID been verified
+    prod_id_verified: bool,
+
+    init_received: bool,
+
+    /// have we received the full advertisement
+    advert_received: bool,
+
+    /// have we received an error list
+    error_list_received: bool,
+    last_error_received: u8,
+
+    last_chan_received: u8,
+    last_exec_chan_rid: u8,
+    last_command_chan_rid: u8,
+
+    /// Rotation vector as unit quaternion
+    rotation_quaternion: [f32; 4],
+    /// Heading accuracy of rotation vector (radians)
+    rot_quaternion_acc: f32,
+
+    /// Linear acceleration vector
+    linear_accel: [f32; 3],
+
+    /// Gyroscope calibrated data
+    gyro: [f32; 3],
+}
+
+#[cfg(not(feature = "defmt-03"))]
+#[derive(Debug)]
 pub struct BNO080<SI> {
     pub(crate) sensor_interface: SI,
     /// each communication channel with the device has its own sequence number

@@ -714,7 +714,7 @@ where
 {
     /// Consume all available messages on the port without processing them
     pub fn eat_all_messages(&mut self, delay: &mut impl DelayMs<u8>) {
-        #[cfg(feature = "defmt-03")]
+        
         println!("eat_n");
         loop {
             let msg_count = self.eat_one_message(delay);
@@ -762,7 +762,7 @@ where
                 self.handle_received_packet(received_len);
             }
         } else {
-            #[cfg(feature = "defmt-03")]
+            
             println!("handle1 err {:?}", res);
         }
 
@@ -775,11 +775,11 @@ where
     pub fn eat_one_message(&mut self, delay: &mut impl DelayMs<u8>) -> usize {
         let res = self.receive_packet_with_timeout(delay, 150);
         return if let Ok(received_len) = res {
-            #[cfg(feature = "defmt-03")]
+            
             println!("e1 {}", received_len);
             received_len
         } else {
-            #[cfg(feature = "defmt-03")]
+            
             println!("e1 err {:?}", res);
             0
         };
@@ -790,7 +790,7 @@ where
         let payload = &self.packet_recv_buf[PACKET_HEADER_LENGTH..received_len];
         let mut cursor: usize = 1; //skip response type
 
-        #[cfg(feature = "defmt-03")]
+        
         println!("AdvRsp: {}", payload_len);
 
         while cursor < payload_len {
@@ -864,14 +864,14 @@ where
         let mut outer_cursor: usize = PACKET_HEADER_LENGTH + 5; //skip header, timestamp
                                                                 //TODO need to skip more above for a payload-level timestamp??
         if received_len < outer_cursor {
-            #[cfg(feature = "defmt-03")]
+            
             println!("bad lens: {} < {}", received_len, outer_cursor);
             return;
         }
 
         let payload_len = received_len - outer_cursor;
         if payload_len < 14 {
-            #[cfg(feature = "defmt-03")]
+            
             println!(
                 "bad report: {:?}",
                 &self.packet_recv_buf[..PACKET_HEADER_LENGTH]
@@ -961,7 +961,7 @@ where
         for cursor in 1..payload_len {
             let err: u8 = payload[cursor];
             self.last_error_received = err;
-            #[cfg(feature = "defmt-03")]
+            
             println!("lerr: {:x}", err);
         }
     }
@@ -987,19 +987,19 @@ where
                 }
                 _ => {
                     self.last_command_chan_rid = report_id;
-                    #[cfg(feature = "defmt-03")]
+                    
                     println!("unh cmd: {}", report_id);
                 }
             },
             CHANNEL_EXECUTABLE => match report_id {
                 EXECUTABLE_DEVICE_RESP_RESET_COMPLETE => {
                     self.device_reset = true;
-                    #[cfg(feature = "defmt-03")]
+                    
                     println!("resp_reset {}", 1);
                 }
                 _ => {
                     self.last_exec_chan_rid = report_id;
-                    #[cfg(feature = "defmt-03")]
+                    
                     println!("unh exe: {:x}", report_id);
                 }
             },
@@ -1013,11 +1013,11 @@ where
                         } else if cmd_resp == SH2_INIT_SYSTEM {
                             self.init_received = true;
                         }
-                        #[cfg(feature = "defmt-03")]
+                        
                         println!("CMD_RESP: 0x{:X}", cmd_resp);
                     }
                     SHUB_PROD_ID_RESP => {
-                        #[cfg(feature = "defmt-03")]
+                        
                         {
                             //let reset_cause = msg[4 + 1];
                             let sw_vers_major = msg[4 + 2];
@@ -1033,11 +1033,11 @@ where
                     }
                     SHUB_GET_FEATURE_RESP => {
                         // 0xFC
-                        #[cfg(feature = "defmt-03")]
+                        
                         println!("feat resp: {}", msg[5]);
                     }
                     _ => {
-                        #[cfg(feature = "defmt-03")]
+                        
                         println!(
                             "unh hbc: 0x{:x} {:x}",
                             report_id,
@@ -1051,7 +1051,7 @@ where
             }
             _ => {
                 self.last_chan_received = chan_num;
-                #[cfg(feature = "defmt-03")]
+                
                 println!("unh chan 0x{:X}", chan_num);
             }
         }
@@ -1063,7 +1063,7 @@ where
         &mut self,
         delay_source: &mut impl DelayMs<u8>,
     ) -> Result<(), WrapperError<SE>> {
-        #[cfg(feature = "defmt-03")]
+        
         println!("wrapper init");
 
         //Section 5.1.1.1 : On system startup, the SHTP control application will send
@@ -1129,7 +1129,7 @@ where
         report_id: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
-        #[cfg(feature = "defmt-03")]
+        
         println!("enable_report 0x{:X}", report_id);
 
         let micros_between_reports: u32 =
@@ -1201,7 +1201,7 @@ where
         delay: &mut impl DelayMs<u8>,
         max_ms: u8,
     ) -> Result<usize, WrapperError<SE>> {
-        // #[cfg(feature = "defmt-03")]
+        // 
         // println!("r_p");
 
         self.packet_recv_buf[0] = 0;
@@ -1212,7 +1212,7 @@ where
             .map_err(WrapperError::CommError)?;
 
         self.last_packet_len_received = packet_len;
-        // #[cfg(feature = "defmt-03")]
+        // 
         // println!("recv {}", packet_len);
 
         Ok(packet_len)
@@ -1223,7 +1223,7 @@ where
         &mut self,
         delay: &mut impl DelayMs<u8>,
     ) -> Result<(), WrapperError<SE>> {
-        #[cfg(feature = "defmt-03")]
+        
         println!("request PID...");
         let cmd_body: [u8; 2] = [
             SHUB_PROD_ID_REQ, //request product ID
@@ -1245,12 +1245,14 @@ where
 
         // process all incoming messages until we get a product id (or no more data)
         while !self.prod_id_verified {
-            #[cfg(feature = "defmt-03")]
+            static mut ITERATIONS: u8 = 0;
             println!("read PID");
+            unsafe {println!("Tried reading PID {} times", ITERATIONS);}
             let msg_count = self.handle_one_message(delay, 150u8);
             if msg_count < 1 {
                 break;
             }
+            unsafe { ITERATIONS += 1 }
         }
 
         if !self.prod_id_verified {
@@ -1286,7 +1288,7 @@ where
     /// Normally applications should not need to call this directly,
     /// as it is called during `init`.
     pub fn soft_reset(&mut self) -> Result<(), WrapperError<SE>> {
-        // #[cfg(feature = "defmt-03")]
+        // 
         // println!("soft_reset");
         let data: [u8; 1] = [EXECUTABLE_DEVICE_CMD_RESET];
         // send command packet and ignore received packets
@@ -1306,7 +1308,7 @@ where
         body_data: &[u8],
     ) -> Result<usize, WrapperError<SE>> {
         let send_packet_length = self.prep_send_packet(channel, body_data);
-        // #[cfg(feature = "defmt-03")]
+        // 
         // println!("srcv {} ...", send_packet_length);
 
         let recv_packet_length = self
@@ -1317,7 +1319,7 @@ where
             )
             .map_err(WrapperError::CommError)?;
 
-        #[cfg(feature = "defmt-03")]
+        
         println!("srcv {} {}", send_packet_length, recv_packet_length);
 
         Ok(recv_packet_length)

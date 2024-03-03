@@ -1,5 +1,3 @@
-use embedded_hal;
-
 use super::SensorInterface;
 use crate::interface::{SensorCommon, PACKET_HEADER_LENGTH};
 use embedded_hal::blocking::delay::DelayMs;

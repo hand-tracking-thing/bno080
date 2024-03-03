@@ -20,7 +20,7 @@ keywords = [
 readme = "README.md"
 
 [dependencies]
-embedded-hal = { version = "0.2.4", features = ["unproven"] }
+embedded-hal = { version = "1.0.0" }
 defmt = { version = "0.3.0", optional = true }
 
 [features]

@@ -6,7 +6,7 @@ pub mod mock_i2c_port;
 
 use core::ops::Shl;
 
-use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::delay::DelayNs;
 
 #[cfg(feature = "defmt-03")]
 use defmt::println;
@@ -19,7 +19,7 @@ pub trait SensorInterface {
     /// give the sensor interface a chance to set up
     fn setup(
         &mut self,
-        delay_source: &mut impl DelayMs<u8>,
+        delay_source: &mut impl DelayNs,
     ) -> Result<(), Self::SensorError>;
 
     /// Write the whole packet provided
@@ -37,7 +37,7 @@ pub trait SensorInterface {
     fn read_with_timeout(
         &mut self,
         recv_buf: &mut [u8],
-        delay_source: &mut impl DelayMs<u8>,
+        delay_source: &mut impl DelayNs,
         max_ms: u8,
     ) -> Result<usize, Self::SensorError>;
 

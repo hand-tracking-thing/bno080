@@ -1,6 +1,6 @@
 use super::{SensorCommon, SensorInterface, PACKET_HEADER_LENGTH};
 use crate::Error;
-use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::delay::DelayNs;
 
 #[cfg(feature = "defmt-03")]
 use defmt::println;
@@ -29,9 +29,7 @@ pub struct I2cInterface<I2C> {
 
 impl<I2C, CommE> I2cInterface<I2C>
 where
-    I2C: embedded_hal::blocking::i2c::Write<Error = CommE>
-        + embedded_hal::blocking::i2c::Read<Error = CommE>
-        + embedded_hal::blocking::i2c::WriteRead<Error = CommE>,
+    I2C: embedded_hal::i2c::I2c<Error = CommE>
 {
     pub fn default(i2c: I2C) -> Self {
         Self::new(i2c, DEFAULT_ADDRESS)
@@ -163,9 +161,7 @@ where
 
 impl<I2C, CommE> SensorInterface for I2cInterface<I2C>
 where
-    I2C: embedded_hal::blocking::i2c::Write<Error = CommE>
-        + embedded_hal::blocking::i2c::Read<Error = CommE>
-        + embedded_hal::blocking::i2c::WriteRead<Error = CommE>,
+    I2C: embedded_hal::i2c::I2c<Error = CommE>,
 {
     type SensorError = Error<CommE, ()>;
 
@@ -175,7 +171,7 @@ where
 
     fn setup(
         &mut self,
-        delay_source: &mut impl DelayMs<u8>,
+        delay_source: &mut impl DelayNs,
     ) -> Result<(), Self::SensorError> {
         // #[cfg(feature = "defmt-03")]
         // println!("i2c setup");
@@ -195,7 +191,7 @@ where
     fn read_with_timeout(
         &mut self,
         recv_buf: &mut [u8],
-        delay_source: &mut impl DelayMs<u8>,
+        delay_source: &mut impl DelayNs,
         max_ms: u8,
     ) -> Result<usize, Self::SensorError> {
         let mut total_delay: u8 = 0;
@@ -289,7 +285,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::interface::i2c::DEFAULT_ADDRESS;
-    use crate::interface::mock_i2c_port::FakeI2cPort;
+    // use crate::interface::mock_i2c_port::FakeI2cPort;
     use crate::interface::I2cInterface;
     use crate::wrapper::BNO080;
 

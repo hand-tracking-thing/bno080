@@ -7,7 +7,6 @@ LICENSE: BSD3 (see LICENSE file)
 
 pub mod interface;
 pub mod wrapper;
-pub mod sensorhub;
 
 #[cfg(not(feature = "defmt-03"))]
 mod dummy_defmt;

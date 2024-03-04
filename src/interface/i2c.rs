@@ -3,6 +3,9 @@ use crate::Error;
 use embedded_hal::delay::DelayNs;
 
 #[cfg(feature = "defmt-03")]
+use defmt_03 as defmt;
+
+#[cfg(feature = "defmt-03")]
 use defmt::println;
 
 /// the i2c address normally used by BNO080
@@ -278,6 +281,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use crate::interface::i2c::DEFAULT_ADDRESS;
     // use crate::interface::mock_i2c_port::FakeI2cPort;

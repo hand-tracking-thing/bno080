@@ -21,9 +21,9 @@ readme = "README.md"
 
 [dependencies]
 embedded-hal = { version = "1.0.0" }
-defmt = { version = "0.3.0", optional = true }
+defmt-03 = { version = "0.3.0", optional = true, package = "defmt" }
 paste = "1.0.14"
 
 [features]
 default = []
-defmt-03 = ["dep:defmt"]
+defmt-03 = ["dep:defmt-03"]

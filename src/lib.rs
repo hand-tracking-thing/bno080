@@ -9,6 +9,15 @@ pub mod interface;
 pub mod wrapper;
 pub mod sensorhub;
 
+#[cfg(not(feature = "defmt-03"))]
+mod dummy_defmt;
+
+#[cfg(feature = "defmt-03")]
+use defmt_03 as defmt;
+
+#[cfg(not(feature = "defmt-03"))]
+use dummy_defmt as defmt;
+
 /// Errors in this crate
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt-03", derive(defmt::Format))]

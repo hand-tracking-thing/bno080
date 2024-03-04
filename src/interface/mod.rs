@@ -9,6 +9,9 @@ use core::ops::Shl;
 use embedded_hal::delay::DelayNs;
 
 #[cfg(feature = "defmt-03")]
+use defmt_03 as defmt;
+
+#[cfg(feature = "defmt-03")]
 use defmt::println;
 
 /// A method of communicating with the sensor

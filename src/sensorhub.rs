@@ -1,5 +1,8 @@
 use paste::paste;
 
+#[cfg(feature = "defmt-03")]
+use defmt_03 as defmt;
+
 macro_rules! qpoint_impl {
     ( $(($qpoint:literal <> $name:ident));* $(;)? ) => {
         #[cfg_attr(feature = "defmt-03", derive(defmt::Format))]

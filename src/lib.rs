@@ -5,27 +5,13 @@ LICENSE: BSD3 (see LICENSE file)
 
 #![no_std]
 
-#[cfg(feature = "defmt-03")]
-use defmt::Format;
-
 pub mod interface;
 pub mod wrapper;
+pub mod sensorhub;
 
-#[cfg(not(feature = "defmt-03"))]
 /// Errors in this crate
 #[derive(Debug)]
-pub enum Error<CommE, PinE> {
-    /// Sensor communication error
-    Comm(CommE),
-    /// Pin setting error
-    Pin(PinE),
-    /// The sensor is not responding
-    SensorUnresponsive,
-}
-
-#[cfg(feature = "defmt-03")]
-/// Errors in this crate
-#[derive(Debug, Format)]
+#[cfg_attr(feature = "defmt-03", derive(defmt::Format))]
 pub enum Error<CommE, PinE> {
     /// Sensor communication error
     Comm(CommE),

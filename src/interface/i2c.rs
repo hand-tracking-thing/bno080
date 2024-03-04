@@ -76,9 +76,6 @@ where
             *byte = 0;
         }
 
-        // #[cfg(feature = "defmt-03")]
-        // println!("r.t {}", total_packet_len);
-
         if total_packet_len < MAX_SEGMENT_READ {
             //read directly into the provided receive buffer
             if total_packet_len > 0 {
@@ -100,8 +97,6 @@ where
                     } else {
                         whole_segment_length
                     };
-                // #[cfg(feature = "defmt-03")]
-                // println!("r.s {:x} {}", self.address, segment_read_len);
 
                 self.zero_recv_packet_header();
                 self.i2c_port

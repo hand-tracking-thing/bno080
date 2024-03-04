@@ -9,9 +9,9 @@ use embedded_hal::delay::DelayNs;
 use core::ops::Shr;
 
 #[cfg(feature = "defmt-03")]
-use defmt::Format;
-#[cfg(feature = "defmt-03")]
 use defmt::println;
+#[cfg(feature = "defmt-03")]
+use defmt::Format;
 
 const PACKET_SEND_BUF_LEN: usize = 256;
 const PACKET_RECV_BUF_LEN: usize = 1024;
@@ -118,8 +118,18 @@ pub struct BNO080<SI> {
 
     /// Rotation vector as unit quaternion
     rotation_quaternion: [f32; 4],
+
     /// Heading accuracy of rotation vector (radians)
     rot_quaternion_acc: f32,
+
+    /// Game rotation vector as unit quaternion
+    arvr_quaternion: [f32; 4],
+
+    /// Geomagnetic rotation vector as unit quaternion
+    geomag_quaternion: [f32; 4],
+
+    /// Heading accuracy of rotation vector (radians)
+    geomag_quaternion_acc: f32,
 
     /// Linear acceleration vector
     linear_accel: [f32; 3],
@@ -147,6 +157,9 @@ impl<SI> BNO080<SI> {
             last_command_chan_rid: 0,
             rotation_quaternion: [0.0; 4],
             rot_quaternion_acc: 0.0,
+            arvr_quaternion: [0.0; 4],
+            geomag_quaternion: [0.0; 4],
+            geomag_quaternion_acc: 0.0,
             linear_accel: [0.0; 3],
             gyro: [0.0; 3],
         }
@@ -165,7 +178,7 @@ where
     SE: core::fmt::Debug,
 {
     /// Consume all available messages on the port without processing them
-    pub fn eat_all_messages(&mut self, delay: &mut impl DelayMs<u8>) {
+    pub fn eat_all_messages(&mut self, delay: &mut impl DelayNs) {
         loop {
             let msg_count = self.eat_one_message(delay);
             if msg_count == 0 {
@@ -179,7 +192,7 @@ where
     /// Handle any messages with a timeout
     pub fn handle_all_messages(
         &mut self,
-        delay: &mut impl DelayMs<u8>,
+        delay: &mut impl DelayNs,
         timeout_ms: u8,
     ) -> u32 {
         let mut total_handled: u32 = 0;
@@ -199,7 +212,7 @@ where
     /// return the number of messages handled
     pub fn handle_one_message(
         &mut self,
-        delay: &mut impl DelayMs<u8>,
+        delay: &mut impl DelayNs,
         max_ms: u8,
     ) -> u32 {
         let mut msg_count = 0;
@@ -219,22 +232,19 @@ where
     /// Receive and ignore one message,
     /// returning the size of the packet received or zero
     /// if there was no packet to read.
-    pub fn eat_one_message(&mut self, delay: &mut impl DelayMs<u8>) -> usize {
+    pub fn eat_one_message(&mut self, delay: &mut impl DelayNs) -> usize {
         let res = self.receive_packet_with_timeout(delay, 150);
-        return if let Ok(received_len) = res {
+        if let Ok(received_len) = res {
             received_len
         } else {
             0
-        };
+        }
     }
 
     fn handle_advertise_response(&mut self, received_len: usize) {
         let payload_len = received_len - PACKET_HEADER_LENGTH;
         let payload = &self.packet_recv_buf[PACKET_HEADER_LENGTH..received_len];
         let mut cursor: usize = 1; //skip response type
-
-        #[cfg(feature = "defmt-03")]
-        println!("AdvRsp: {}", payload_len);
 
         while cursor < payload_len {
             let _tag: u8 = payload[cursor];
@@ -326,17 +336,23 @@ where
             outer_cursor = inner_cursor;
             // report_count += 1;
             match report_id {
-                SENSOR_REPORTID_ROTATION_VECTOR => {
-                    self.update_rotation_quaternion(
+                SENSOR_REPORTID_ROTATION_VECTOR => self
+                    .update_rotation_quaternion(
                         data1, data2, data3, data4, data5,
-                    );
-                }
+                    ),
                 SENSOR_REPORTID_LINEAR_ACCEL => {
                     self.update_linear_accel(data1, data2, data3);
                 }
                 SENSOR_REPORTID_GYRO => {
                     self.update_gyro_cal(data1, data2, data3);
                 }
+                SENSOR_REPORTID_ARVR => {
+                    self.update_arvr_quaternion(data1, data2, data3, data4)
+                }
+                SENSOR_REPORTID_GEOMAG_VECTOR => self
+                    .update_geomagnetic_quaternion(
+                        data1, data2, data3, data4, data5,
+                    ),
                 _ => {
                     // debug_println!("uhr: {:X}", report_id);
                     // debug_println!("uhr: 0x{:X} {:?}  ", report_id, &self.packet_recv_buf[start_cursor..start_cursor+5]);
@@ -359,6 +375,44 @@ where
     ) {
         //debug_println!("rquat {} {} {} {} {}", q_i, q_j, q_k, q_r, q_a);
         self.rotation_quaternion = [
+            q14_to_f32(q_i),
+            q14_to_f32(q_j),
+            q14_to_f32(q_k),
+            q14_to_f32(q_r),
+        ];
+        self.rot_quaternion_acc = q12_to_f32(q_a);
+    }
+
+    /// Given a set of quaternion values in the Q-fixed-point format,
+    /// calculate and update the corresponding float values
+    fn update_arvr_quaternion(
+        &mut self,
+        q_i: i16,
+        q_j: i16,
+        q_k: i16,
+        q_r: i16,
+    ) {
+        //debug_println!("rquat {} {} {} {} {}", q_i, q_j, q_k, q_r, q_a);
+        self.arvr_quaternion = [
+            q14_to_f32(q_i),
+            q14_to_f32(q_j),
+            q14_to_f32(q_k),
+            q14_to_f32(q_r),
+        ];
+    }
+
+    /// Given a set of quaternion values in the Q-fixed-point format,
+    /// calculate and update the corresponding float values
+    fn update_geomagnetic_quaternion(
+        &mut self,
+        q_i: i16,
+        q_j: i16,
+        q_k: i16,
+        q_r: i16,
+        q_a: i16,
+    ) {
+        //debug_println!("rquat {} {} {} {} {}", q_i, q_j, q_k, q_r, q_a);
+        self.geomag_quaternion = [
             q14_to_f32(q_i),
             q14_to_f32(q_j),
             q14_to_f32(q_k),
@@ -447,9 +501,7 @@ where
                     SHUB_GET_FEATURE_RESP => {
                         // 0xFC
                     }
-                    _ => {
-
-                    }
+                    _ => {}
                 }
             }
             CHANNEL_SENSOR_REPORTS => {
@@ -465,21 +517,21 @@ where
     /// waiting for the application to configure it.
     pub fn init(
         &mut self,
-        delay_source: &mut impl DelayMs<u8>,
+        delay_source: &mut impl DelayNs,
     ) -> Result<(), WrapperError<SE>> {
         //Section 5.1.1.1 : On system startup, the SHTP control application will send
         // its full advertisement response, unsolicited, to the host.
-        delay_source.delay_ms(1u8);
+        delay_source.delay_ms(1);
         self.sensor_interface
             .setup(delay_source)
             .map_err(WrapperError::CommError)?;
 
         if self.sensor_interface.requires_soft_reset() {
-            delay_source.delay_ms(1u8);
+            delay_source.delay_ms(1);
             self.soft_reset()?;
-            delay_source.delay_ms(150u8);
+            delay_source.delay_ms(150);
             self.eat_all_messages(delay_source);
-            delay_source.delay_ms(50u8);
+            delay_source.delay_ms(50);
             self.eat_all_messages(delay_source);
         } else {
             // we only expect two messages after reset:
@@ -500,10 +552,12 @@ where
     /// is 1 kHz, based on the max update rate of the sensor's gyros.
     pub fn enable_rotation_vector(
         &mut self,
+        flags: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
         self.enable_report(
             SENSOR_REPORTID_ROTATION_VECTOR,
+            flags,
             millis_between_reports,
         )
     }
@@ -511,23 +565,50 @@ where
     /// Enables reporting of linear acceleration vector.
     pub fn enable_linear_accel(
         &mut self,
+        flags: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
-        self.enable_report(SENSOR_REPORTID_LINEAR_ACCEL, millis_between_reports)
+        self.enable_report(
+            SENSOR_REPORTID_LINEAR_ACCEL,
+            flags,
+            millis_between_reports,
+        )
     }
 
     /// Enables reporting of gyroscope data.
     pub fn enable_gyro(
         &mut self,
+        flags: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
-        self.enable_report(SENSOR_REPORTID_GYRO, millis_between_reports)
+        self.enable_report(SENSOR_REPORTID_GYRO, flags, millis_between_reports)
+    }
+
+    pub fn enable_game_rotation_vector(
+        &mut self,
+        flags: u8,
+        millis_between_reports: u16,
+    ) -> Result<(), WrapperError<SE>> {
+        self.enable_report(SENSOR_REPORTID_ARVR, flags, millis_between_reports)
+    }
+
+    pub fn enable_geomagnetic_rotation_vector(
+        &mut self,
+        flags: u8,
+        millis_between_reports: u16,
+    ) -> Result<(), WrapperError<SE>> {
+        self.enable_report(
+            SENSOR_REPORTID_GEOMAG_VECTOR,
+            flags,
+            millis_between_reports,
+        )
     }
 
     /// Enable a particular report
-    fn enable_report(
+    pub fn enable_report(
         &mut self,
         report_id: u8,
+        flags: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
         let micros_between_reports: u32 =
@@ -535,9 +616,9 @@ where
         let cmd_body: [u8; 17] = [
             SHUB_REPORT_SET_FEATURE_CMD,
             report_id,
-            0,                                        //feature flags
-            0,                                        //LSB change sensitivity
-            0,                                        //MSB change sensitivity
+            flags,                                    // feature flags (see SH-2 Reference Manual 6.5.1)
+            0,                                        // LSB change sensitivity
+            0,                                        // MSB change sensitivity
             (micros_between_reports & 0xFFu32) as u8, // LSB report interval, microseconds
             (micros_between_reports.shr(8) & 0xFFu32) as u8,
             (micros_between_reports.shr(16) & 0xFFu32) as u8,
@@ -596,7 +677,7 @@ where
     /// Read one packet into the receive buffer
     pub(crate) fn receive_packet_with_timeout(
         &mut self,
-        delay: &mut impl DelayMs<u8>,
+        delay: &mut impl DelayNs,
         max_ms: u8,
     ) -> Result<usize, WrapperError<SE>> {
         self.packet_recv_buf[0] = 0;
@@ -614,7 +695,7 @@ where
     /// Verify that the sensor returns an expected chip ID
     fn verify_product_id(
         &mut self,
-        delay: &mut impl DelayMs<u8>,
+        delay: &mut impl DelayNs,
     ) -> Result<(), WrapperError<SE>> {
         let cmd_body: [u8; 2] = [
             SHUB_PROD_ID_REQ, //request product ID
@@ -675,6 +756,8 @@ where
     /// Normally applications should not need to call this directly,
     /// as it is called during `init`.
     pub fn soft_reset(&mut self) -> Result<(), WrapperError<SE>> {
+        //
+        // println!("soft_reset");
         let data: [u8; 1] = [EXECUTABLE_DEVICE_CMD_RESET];
         // send command packet and ignore received packets
         let received_len =
@@ -714,7 +797,6 @@ where
 {
     /// Consume all available messages on the port without processing them
     pub fn eat_all_messages(&mut self, delay: &mut impl DelayNs) {
-        
         println!("eat_n");
         loop {
             let msg_count = self.eat_one_message(delay);
@@ -762,7 +844,6 @@ where
                 self.handle_received_packet(received_len);
             }
         } else {
-            
             println!("handle1 err {:?}", res);
         }
 
@@ -775,11 +856,9 @@ where
     pub fn eat_one_message(&mut self, delay: &mut impl DelayNs) -> usize {
         let res = self.receive_packet_with_timeout(delay, 150);
         return if let Ok(received_len) = res {
-            
             println!("e1 {}", received_len);
             received_len
         } else {
-            
             println!("e1 err {:?}", res);
             0
         };
@@ -790,7 +869,6 @@ where
         let payload = &self.packet_recv_buf[PACKET_HEADER_LENGTH..received_len];
         let mut cursor: usize = 1; //skip response type
 
-        
         println!("AdvRsp: {}", payload_len);
 
         while cursor < payload_len {
@@ -864,14 +942,12 @@ where
         let mut outer_cursor: usize = PACKET_HEADER_LENGTH + 5; //skip header, timestamp
                                                                 //TODO need to skip more above for a payload-level timestamp??
         if received_len < outer_cursor {
-            
             println!("bad lens: {} < {}", received_len, outer_cursor);
             return;
         }
 
         let payload_len = received_len - outer_cursor;
         if payload_len < 14 {
-            
             println!(
                 "bad report: {:?}",
                 &self.packet_recv_buf[..PACKET_HEADER_LENGTH]
@@ -961,7 +1037,7 @@ where
         for cursor in 1..payload_len {
             let err: u8 = payload[cursor];
             self.last_error_received = err;
-            
+
             println!("lerr: {:x}", err);
         }
     }
@@ -987,19 +1063,19 @@ where
                 }
                 _ => {
                     self.last_command_chan_rid = report_id;
-                    
+
                     println!("unh cmd: {}", report_id);
                 }
             },
             CHANNEL_EXECUTABLE => match report_id {
                 EXECUTABLE_DEVICE_RESP_RESET_COMPLETE => {
                     self.device_reset = true;
-                    
+
                     println!("resp_reset {}", 1);
                 }
                 _ => {
                     self.last_exec_chan_rid = report_id;
-                    
+
                     println!("unh exe: {:x}", report_id);
                 }
             },
@@ -1013,19 +1089,17 @@ where
                         } else if cmd_resp == SH2_INIT_SYSTEM {
                             self.init_received = true;
                         }
-                        
+
                         println!("CMD_RESP: 0x{:X}", cmd_resp);
                     }
                     SHUB_PROD_ID_RESP => {
-                        
                         {
                             //let reset_cause = msg[4 + 1];
                             let sw_vers_major = msg[4 + 2];
                             let sw_vers_minor = msg[4 + 3];
                             println!(
                                 "PID_RESP {}.{}",
-                                sw_vers_major,
-                                sw_vers_minor
+                                sw_vers_major, sw_vers_minor
                             );
                         }
 
@@ -1033,11 +1107,10 @@ where
                     }
                     SHUB_GET_FEATURE_RESP => {
                         // 0xFC
-                        
+
                         println!("feat resp: {}", msg[5]);
                     }
                     _ => {
-                        
                         println!(
                             "unh hbc: 0x{:x} {:x}",
                             report_id,
@@ -1051,7 +1124,7 @@ where
             }
             _ => {
                 self.last_chan_received = chan_num;
-                
+
                 println!("unh chan 0x{:X}", chan_num);
             }
         }
@@ -1063,7 +1136,6 @@ where
         &mut self,
         delay_source: &mut impl DelayNs,
     ) -> Result<(), WrapperError<SE>> {
-        
         println!("wrapper init");
 
         //Section 5.1.1.1 : On system startup, the SHTP control application will send
@@ -1129,7 +1201,6 @@ where
         report_id: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
-        
         println!("enable_report 0x{:X}", report_id);
 
         let micros_between_reports: u32 =
@@ -1201,7 +1272,7 @@ where
         delay: &mut impl DelayNs,
         max_ms: u8,
     ) -> Result<usize, WrapperError<SE>> {
-        // 
+        //
         // println!("r_p");
 
         self.packet_recv_buf[0] = 0;
@@ -1212,7 +1283,7 @@ where
             .map_err(WrapperError::CommError)?;
 
         self.last_packet_len_received = packet_len;
-        // 
+        //
         // println!("recv {}", packet_len);
 
         Ok(packet_len)
@@ -1223,7 +1294,6 @@ where
         &mut self,
         delay: &mut impl DelayNs,
     ) -> Result<(), WrapperError<SE>> {
-        
         println!("request PID...");
         let cmd_body: [u8; 2] = [
             SHUB_PROD_ID_REQ, //request product ID
@@ -1247,7 +1317,9 @@ where
         while !self.prod_id_verified {
             static mut ITERATIONS: u8 = 0;
             println!("read PID");
-            unsafe {println!("Tried reading PID {} times", ITERATIONS);}
+            unsafe {
+                println!("Tried reading PID {} times", ITERATIONS);
+            }
             let msg_count = self.handle_one_message(delay, 150u8);
             if msg_count < 1 {
                 break;
@@ -1288,7 +1360,7 @@ where
     /// Normally applications should not need to call this directly,
     /// as it is called during `init`.
     pub fn soft_reset(&mut self) -> Result<(), WrapperError<SE>> {
-        // 
+        //
         // println!("soft_reset");
         let data: [u8; 1] = [EXECUTABLE_DEVICE_CMD_RESET];
         // send command packet and ignore received packets
@@ -1308,7 +1380,7 @@ where
         body_data: &[u8],
     ) -> Result<usize, WrapperError<SE>> {
         let send_packet_length = self.prep_send_packet(channel, body_data);
-        // 
+        //
         // println!("srcv {} ...", send_packet_length);
 
         let recv_packet_length = self
@@ -1319,7 +1391,6 @@ where
             )
             .map_err(WrapperError::CommError)?;
 
-        
         println!("srcv {} {}", send_packet_length, recv_packet_length);
 
         Ok(recv_packet_length)
@@ -1332,8 +1403,6 @@ const Q12_SCALE: f32 = 1.0 / ((1 << 12) as f32);
 const Q14_SCALE: f32 = 1.0 / ((1 << 14) as f32);
 
 fn q14_to_f32(q_val: i16) -> f32 {
-    // let qq_val =  fpa::I2F14(q_val).unwrap();
-    // return f32(qq_val)
     (q_val as f32) * Q14_SCALE
 }
 
@@ -1400,7 +1469,9 @@ const SENSOR_REPORTID_ROTATION_VECTOR: u8 = 0x05;
 /// Gyroscope uncalibrated (rad/s): Q point 9
 const SENSOR_REPORTID_GYRO: u8 = 0x07;
 // 0x08 game rotation vector : Q point 14
+const SENSOR_REPORTID_ARVR: u8 = 0x08;
 // 0x09 geomagnetic rotation vector: Q point 14 for quaternion, Q point 12 for heading accuracy
+const SENSOR_REPORTID_GEOMAG_VECTOR: u8 = 0x09;
 // 0x0A pressure (hectopascals) from external baro: Q point 20
 // 0x0B ambient light (lux) from external sensor: Q point 8
 // 0x0C humidity (percent) from external sensor: Q point 8
@@ -1423,6 +1494,26 @@ const SH2_CMD_INITIALIZE: u8 = 4;
 const SH2_INIT_SYSTEM: u8 = 1;
 const SH2_STARTUP_INIT_UNSOLICITED: u8 =
     SH2_CMD_INITIALIZE | SH2_INIT_UNSOLICITED;
+
+// let cmd_body: [u8; 17] = [
+//     SHUB_REPORT_SET_FEATURE_CMD,
+//     report_id,
+//     0,                                        //feature flags
+//     0,                                        //LSB change sensitivity
+//     0,                                        //MSB change sensitivity
+//     (micros_between_reports & 0xFFu32) as u8, // LSB report interval, microseconds
+//     (micros_between_reports.shr(8) & 0xFFu32) as u8,
+//     (micros_between_reports.shr(16) & 0xFFu32) as u8,
+//     (micros_between_reports.shr(24) & 0xFFu32) as u8, // MSB report interval
+//     0, // LSB Batch Interval
+//     0,
+//     0,
+//     0, // MSB Batch interval
+//     0, // LSB sensor-specific config
+//     0,
+//     0,
+//     0, // MSB sensor-specific config
+// ];
 
 #[cfg(test)]
 mod tests {

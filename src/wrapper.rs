@@ -63,15 +63,6 @@ pub struct BNO080<SI> {
     /// Heading accuracy of rotation vector (radians)
     rot_quaternion_acc: f32,
 
-    /// Game rotation vector as unit quaternion
-    arvr_quaternion: [f32; 4],
-
-    /// Geomagnetic rotation vector as unit quaternion
-    geomag_quaternion: [f32; 4],
-
-    /// Heading accuracy of rotation vector (radians)
-    geomag_quaternion_acc: f32,
-
     /// Linear acceleration vector
     linear_accel: [f32; 3],
 
@@ -98,9 +89,6 @@ impl<SI> BNO080<SI> {
             last_command_chan_rid: 0,
             rotation_quaternion: [0.0; 4],
             rot_quaternion_acc: 0.0,
-            arvr_quaternion: [0.0; 4],
-            geomag_quaternion: [0.0; 4],
-            geomag_quaternion_acc: 0.0,
             linear_accel: [0.0; 3],
             gyro: [0.0; 3],
         }
@@ -291,14 +279,22 @@ where
             match report_id {
                 SENSOR_REPORTID_ROTATION_VECTOR => {
                     self.update_rotation_quaternion(
-                        data1, data2, data3, data4, data5,
+                        data1, data2, data3, data4,
                     );
+                    self.update_rotation_quaternion_acc(data5);
                 }
                 SENSOR_REPORTID_LINEAR_ACCEL => {
                     self.update_linear_accel(data1, data2, data3);
                 }
                 SENSOR_REPORTID_GYRO => {
                     self.update_gyro_cal(data1, data2, data3);
+                }
+                SENSOR_REPORTID_ARVR_STABILISED_ROTATION_VECTOR => {
+                    self.update_rotation_quaternion(data1, data2, data3, data4);
+                    self.update_rotation_quaternion_acc(data5);
+                }
+                SENSOR_REPORTID_ARVR_STABILISED_GAME_ROTATION_VECTOR => {
+                    self.update_rotation_quaternion(data1, data2, data3, data4);
                 }
                 _ => {
                     // debug_println!("uhr: {:X}", report_id);
@@ -318,7 +314,6 @@ where
         q_j: i16,
         q_k: i16,
         q_r: i16,
-        q_a: i16,
     ) {
         //debug_println!("rquat {} {} {} {} {}", q_i, q_j, q_k, q_r, q_a);
         self.rotation_quaternion = [
@@ -327,6 +322,12 @@ where
             q14_to_f32(q_k),
             q14_to_f32(q_r),
         ];
+    }
+
+    fn update_rotation_quaternion_acc(
+        &mut self,
+        q_a: i16,
+    ) {
         self.rot_quaternion_acc = q12_to_f32(q_a);
     }
 
@@ -531,7 +532,23 @@ where
         flags: u8,
         millis_between_reports: u16,
     ) -> Result<(), WrapperError<SE>> {
-        self.enable_report(SENSOR_REPORTID_ARVR, flags, millis_between_reports)
+        self.enable_report(SENSOR_REPORTID_GAME_ROTATION_VECTOR, flags, millis_between_reports)
+    }
+
+    pub fn enable_arvr_stabilised_rotation_vector(
+        &mut self,
+        flags: u8,
+        millis_between_reports: u16,
+    ) -> Result<(), WrapperError<SE>> {
+        self.enable_report(SENSOR_REPORTID_ARVR_STABILISED_ROTATION_VECTOR, flags, millis_between_reports)
+    }
+
+    pub fn enable_arvr_stabilised_game_rotation_vector(
+        &mut self,
+        flags: u8,
+        millis_between_reports: u16,
+    ) -> Result<(), WrapperError<SE>> {
+        self.enable_report(SENSOR_REPORTID_ARVR_STABILISED_GAME_ROTATION_VECTOR, flags, millis_between_reports)
     }
 
     pub fn enable_geomagnetic_rotation_vector(
@@ -822,7 +839,7 @@ const SENSOR_REPORTID_ROTATION_VECTOR: u8 = 0x05;
 /// Gyroscope uncalibrated (rad/s): Q point 9
 const SENSOR_REPORTID_GYRO: u8 = 0x07;
 // 0x08 game rotation vector : Q point 14
-const SENSOR_REPORTID_ARVR: u8 = 0x08;
+const SENSOR_REPORTID_GAME_ROTATION_VECTOR: u8 = 0x08;
 // 0x09 geomagnetic rotation vector: Q point 14 for quaternion, Q point 12 for heading accuracy
 const SENSOR_REPORTID_GEOMAG_VECTOR: u8 = 0x09;
 // 0x0A pressure (hectopascals) from external baro: Q point 20
@@ -830,6 +847,8 @@ const SENSOR_REPORTID_GEOMAG_VECTOR: u8 = 0x09;
 // 0x0C humidity (percent) from external sensor: Q point 8
 // 0x0D proximity (centimeters) from external sensor: Q point 4
 // 0x0E temperature (degrees C) from external sensor: Q point 7
+const SENSOR_REPORTID_ARVR_STABILISED_ROTATION_VECTOR: u8 = 0x28;
+const SENSOR_REPORTID_ARVR_STABILISED_GAME_ROTATION_VECTOR: u8 = 0x29;
 
 /// executable/device channel responses
 /// Figure 1-27: SHTP executable commands and response

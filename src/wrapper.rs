@@ -257,14 +257,6 @@ where
         }
 
         let payload_len = received_len - outer_cursor;
-        if payload_len < 14 {
-            println!(
-                "bad report: {:?}",
-                &self.packet_recv_buf[..PACKET_HEADER_LENGTH]
-            );
-
-            return;
-        }
 
         // there may be multiple reports per payload
         while outer_cursor < payload_len {
